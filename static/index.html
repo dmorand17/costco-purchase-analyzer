@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Costco Purchase Analyzer</title>
+<style>
+  :root {
+    --blue: #005b96;
+    --red: #e31837;
+    --light: #f5f7fa;
+    --border: #dde2e8;
+    --text: #2c3e50;
+    --muted: #6c757d;
+    --success: #28a745;
+    --warn: #ffc107;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--light); color: var(--text); }
+
+  /* ── Header ── */
+  header {
+    background: var(--blue);
+    color: white;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  header h1 { font-size: 1.2rem; font-weight: 600; }
+  #auth-section { display: flex; align-items: center; gap: 12px; font-size: 0.9rem; }
+  #user-email { opacity: 0.85; }
+  #logout-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4);
+    color: white; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+  #logout-btn:hover { background: rgba(255,255,255,0.3); }
+
+  /* ── Login overlay ── */
+  #login-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center; z-index: 1000;
+  }
+  #login-overlay.hidden { display: none; }
+  .login-card {
+    background: white; border-radius: 12px; padding: 40px;
+    width: 360px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  }
+  .login-card h2 { color: var(--blue); margin-bottom: 24px; text-align: center; }
+  .login-card input {
+    width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 1rem; margin-bottom: 12px;
+  }
+  .login-card input:focus { outline: none; border-color: var(--blue); }
+  .login-card button {
+    width: 100%; padding: 11px; background: var(--blue); color: white;
+    border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600;
+  }
+  .login-card button:hover { background: #004a7a; }
+  #login-error { color: var(--red); font-size: 0.85rem; margin-top: 8px; min-height: 20px; }
+  .login-tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
+  .login-tab { flex: 1; text-align: center; padding: 8px; cursor: pointer; font-weight: 500; color: var(--muted); }
+  .login-tab.active { color: var(--blue); border-bottom: 2px solid var(--blue); margin-bottom: -2px; }
+
+  /* ── Nav tabs ── */
+  nav { background: white; border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 4px; }
+  .nav-tab {
+    padding: 12px 20px; cursor: pointer; font-weight: 500; color: var(--muted);
+    border-bottom: 3px solid transparent; transition: color 0.15s;
+  }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  /* ── Content ── */
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 24px; }
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* ── Cards ── */
+  .card { background: white; border-radius: 10px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 20px; }
+  .card h2 { font-size: 1.1rem; color: var(--blue); margin-bottom: 16px; }
+
+  /* ── Upload area ── */
+  #drop-zone {
+    border: 2px dashed var(--border); border-radius: 8px; padding: 48px;
+    text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+  }
+  #drop-zone:hover, #drop-zone.dragover { border-color: var(--blue); background: #eef5ff; }
+  #drop-zone p { color: var(--muted); margin-top: 8px; font-size: 0.9rem; }
+  #drop-zone svg { color: var(--blue); }
+  #file-input { display: none; }
+  .upload-icon { font-size: 2.5rem; margin-bottom: 8px; }
+
+  /* ── Progress bar ── */
+  .progress-wrap { margin-top: 16px; display: none; }
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--blue); width: 0; transition: width 0.3s; border-radius: 3px; }
+  #upload-status { font-size: 0.9rem; color: var(--muted); margin-top: 8px; }
+
+  /* ── Buttons ── */
+  .btn { padding: 8px 18px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.9rem; font-weight: 500; transition: opacity 0.15s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: var(--blue); color: white; }
+  .btn-danger { background: var(--red); color: white; }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th { background: var(--blue); color: white; padding: 10px 12px; text-align: left; font-weight: 500; }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  tr:hover td { background: #f9fbff; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+  .badge-tpd { background: #fff3cd; color: #856404; }
+  .badge-savings { background: #d4edda; color: #155724; }
+
+  /* ── Receipt cards ── */
+  .receipt-card { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+  .receipt-header { padding: 14px 18px; background: #fafbfc; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+  .receipt-header:hover { background: #f0f4ff; }
+  .receipt-header h3 { font-size: 0.95rem; }
+  .receipt-body { display: none; padding: 16px 18px; border-top: 1px solid var(--border); }
+  .receipt-body.open { display: block; }
+  .receipt-meta { font-size: 0.85rem; color: var(--muted); margin-bottom: 12px; }
+
+  /* ── Deals ── */
+  .deal-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  .deal-tab-btn {
+    padding: 6px 16px; border-radius: 20px; border: 1px solid var(--border);
+    cursor: pointer; font-size: 0.85rem; background: white; transition: all 0.15s;
+  }
+  .deal-tab-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
+  .deal-count { display: inline-block; background: var(--red); color: white; border-radius: 10px; padding: 1px 6px; font-size: 0.75rem; margin-left: 4px; }
+
+  /* ── Analysis output ── */
+  #analysis-output { min-height: 100px; font-size: 0.95rem; line-height: 1.6; }
+  #analysis-output table { margin: 12px 0; }
+  #analysis-output th { font-size: 0.85rem; }
+  #analysis-output td { font-size: 0.85rem; }
+  .thinking { color: var(--muted); font-size: 0.85rem; font-style: italic; }
+  .streaming-cursor::after { content: '▌'; animation: blink 0.7s infinite; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+  /* ── Filters ── */
+  .filter-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 20px; }
+  .filter-group { display: flex; flex-direction: column; gap: 4px; }
+  .filter-group label { font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+  .filter-group input, .filter-group select {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem;
+  }
+  .filter-group input:focus, .filter-group select:focus { outline: none; border-color: var(--blue); }
+
+  /* ── Misc ── */
+  .empty-state { text-align: center; padding: 48px; color: var(--muted); }
+  .empty-state p { margin-top: 8px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .text-right { text-align: right; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #333; color: white; padding: 10px 20px; border-radius: 8px; font-size: 0.9rem; z-index: 9999; display: none; }
+  .toast.show { display: block; animation: fadeIn 0.2s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<!-- ── Login overlay ── -->
+<div id="login-overlay">
+  <div class="login-card">
+    <h2>🛒 Costco Purchase Analyzer</h2>
+    <div class="login-tabs">
+      <div class="login-tab active" data-tab="signin">Sign In</div>
+      <div class="login-tab" data-tab="signup">Create Account</div>
+    </div>
+    <div id="signin-form">
+      <input type="email" id="signin-email" placeholder="Email address" autocomplete="email">
+      <input type="password" id="signin-password" placeholder="Password" autocomplete="current-password">
+      <button onclick="doSignIn()">Sign In</button>
+    </div>
+    <div id="signup-form" style="display:none">
+      <input type="email" id="signup-email" placeholder="Email address" autocomplete="email">
+      <input type="password" id="signup-password" placeholder="Password (min 8 chars)" autocomplete="new-password">
+      <input type="password" id="signup-confirm" placeholder="Confirm password" autocomplete="new-password">
+      <button onclick="doSignUp()">Create Account</button>
+    </div>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- ── Header ── -->
+<header>
+  <h1>🛒 Costco Purchase Analyzer</h1>
+  <div id="auth-section">
+    <span id="user-email"></span>
+    <button id="logout-btn" onclick="doLogout()">Sign Out</button>
+  </div>
+</header>
+
+<!-- ── Nav ── -->
+<nav>
+  <div class="nav-tab active" data-section="upload">Upload Receipts</div>
+  <div class="nav-tab" data-section="analyze">AI Price Match</div>
+  <div class="nav-tab" data-section="deals">Deals</div>
+  <div class="nav-tab" data-section="receipts">My Receipts</div>
+</nav>
+
+<!-- ── Main ── -->
+<main>
+
+  <!-- Upload -->
+  <div id="section-upload" class="section active">
+    <div class="card">
+      <h2>Upload a Receipt</h2>
+      <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <div class="upload-icon">📄</div>
+        <strong>Drop a PDF here or click to select</strong>
+        <p>Costco receipt PDFs up to 10 MB</p>
+      </div>
+      <input type="file" id="file-input" accept="application/pdf" multiple>
+      <div class="progress-wrap" id="progress-wrap">
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <div id="upload-status"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analyze -->
+  <div id="section-analyze" class="section">
+    <div class="card">
+      <h2>AI Price Match Analysis</h2>
+      <div class="filter-row">
+        <div class="filter-group">
+          <label>Date From</label>
+          <input type="date" id="analyze-from">
+        </div>
+        <div class="filter-group">
+          <label>Date To</label>
+          <input type="date" id="analyze-to">
+        </div>
+        <div class="filter-group">
+          <label>Sources</label>
+          <select id="analyze-sources" multiple style="height:80px;min-width:160px">
+            <option value="cocowest">CocoWest</option>
+            <option value="cocoeast">CocoEast</option>
+            <option value="coupon_book">Coupon Book</option>
+            <option value="redflagdeals_hot">RedFlagDeals Hot</option>
+            <option value="redflagdeals_clearance">RedFlagDeals Clearance</option>
+            <option value="reddit_costco">Reddit r/Costco</option>
+            <option value="reddit_costcoca">Reddit r/CostcoCanada</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="runAnalysis()">▶ Analyze</button>
+        </div>
+      </div>
+      <div id="receipt-select-wrap" style="margin-bottom:16px">
+        <label style="font-size:0.8rem;color:var(--muted);font-weight:500;display:block;margin-bottom:6px">
+          Filter by receipt (leave empty for all)
+        </label>
+        <div id="receipt-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+      </div>
+      <div id="analysis-output"><p class="empty-state">Select options above and click Analyze.</p></div>
+    </div>
+  </div>
+
+  <!-- Deals -->
+  <div id="section-deals" class="section">
+    <div class="card">
+      <h2>Current Deals</h2>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="scanPrices()"><span class="spinner" id="scan-spinner" style="display:none"></span>🔄 Scan Deals Now</button>
+        <button class="btn btn-danger" onclick="clearPriceDrops()">🗑 Clear All</button>
+        <input type="search" id="deals-search" placeholder="Search deals…" style="padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.9rem;margin-left:auto">
+      </div>
+      <div class="deal-tabs" id="deal-source-tabs"></div>
+      <div id="deals-table-wrap"></div>
+    </div>
+  </div>
+
+  <!-- Receipts -->
+  <div id="section-receipts" class="section">
+    <div class="card">
+      <h2>My Receipts</h2>
+      <div class="actions">
+        <button class="btn btn-danger" onclick="clearReceipts()">🗑 Clear All Receipts</button>
+      </div>
+      <div id="receipts-list"></div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const CFG = window.APP_CONFIG || window.CONFIG || {};
+const API_URL = (CFG.API_URL || '').replace(/\/$/, '');
+const POOL_ID = CFG.COGNITO_USER_POOL_ID || '';
+const CLIENT_ID = CFG.COGNITO_CLIENT_ID || '';
+const REGION = CFG.REGION || 'us-east-1';
+
+// ── Auth state ────────────────────────────────────────────────────────────────
+let authToken = null;
+let currentUser = null;
+const LOCAL_MODE = !POOL_ID || !CLIENT_ID;
+
+function getHeaders(extra = {}) {
+  const h = { 'Content-Type': 'application/json', ...extra };
+  if (authToken) h['Authorization'] = `Bearer ${authToken}`;
+  return h;
+}
+
+async function apiFetch(path, opts = {}) {
+  const url = `${API_URL}${path}`;
+  const res = await fetch(url, { ...opts, headers: { ...getHeaders(), ...(opts.headers || {}) } });
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText);
+    throw new Error(err || `HTTP ${res.status}`);
+  }
+  return res;
+}
+
+// ── Cognito Auth (Amplify JS SDK) ─────────────────────────────────────────────
+let cognitoUser = null;
+let poolData = null;
+
+function loadCognitoSDK() {
+  return new Promise((resolve) => {
+    if (window.AmazonCognitoIdentity) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@6/dist/amazon-cognito-identity.min.js';
+    s.onload = resolve;
+    document.head.appendChild(s);
+  });
+}
+
+async function initAuth() {
+  if (LOCAL_MODE) {
+    document.getElementById('login-overlay').classList.add('hidden');
+    document.getElementById('user-email').textContent = 'local mode';
+    return;
+  }
+  await loadCognitoSDK();
+  poolData = new AmazonCognitoIdentity.CognitoUserPool({ UserPoolId: POOL_ID, ClientId: CLIENT_ID });
+  const stored = poolData.getCurrentUser();
+  if (stored) {
+    stored.getSession((err, session) => {
+      if (!err && session.isValid()) {
+        authToken = session.getIdToken().getJwtToken();
+        currentUser = stored;
+        document.getElementById('login-overlay').classList.add('hidden');
+        document.getElementById('user-email').textContent = stored.getUsername();
+      }
+    });
+  }
+}
+
+async function doSignIn() {
+  clearLoginError();
+  const email = document.getElementById('signin-email').value.trim();
+  const pass = document.getElementById('signin-password').value;
+  if (!email || !pass) { setLoginError('Email and password required.'); return; }
+  const user = new AmazonCognitoIdentity.CognitoUser({ Username: email, Pool: poolData });
+  const creds = new AmazonCognitoIdentity.AuthenticationDetails({ Username: email, Password: pass });
+  user.authenticateUser(creds, {
+    onSuccess(session) {
+      authToken = session.getIdToken().getJwtToken();
+      currentUser = user;
+      document.getElementById('login-overlay').classList.add('hidden');
+      document.getElementById('user-email').textContent = email;
+      loadAll();
+    },
+    onFailure(err) { setLoginError(err.message || String(err)); },
+  });
+}
+
+async function doSignUp() {
+  clearLoginError();
+  const email = document.getElementById('signup-email').value.trim();
+  const pass = document.getElementById('signup-password').value;
+  const confirm = document.getElementById('signup-confirm').value;
+  if (!email || !pass) { setLoginError('All fields required.'); return; }
+  if (pass !== confirm) { setLoginError('Passwords do not match.'); return; }
+  const attrs = [new AmazonCognitoIdentity.CognitoUserAttribute({ Name: 'email', Value: email })];
+  poolData.signUp(email, pass, attrs, null, (err, result) => {
+    if (err) { setLoginError(err.message || String(err)); return; }
+    setLoginError('✅ Account created! Check your email to verify, then sign in.');
+  });
+}
+
+function doLogout() {
+  if (currentUser) currentUser.signOut();
+  authToken = null; currentUser = null;
+  if (!LOCAL_MODE) location.reload();
+}
+
+function setLoginError(msg) { document.getElementById('login-error').textContent = msg; }
+function clearLoginError() { document.getElementById('login-error').textContent = ''; }
+
+// Login tab switcher
+document.querySelectorAll('.login-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.login-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('signin-form').style.display = tab.dataset.tab === 'signin' ? '' : 'none';
+    document.getElementById('signup-form').style.display = tab.dataset.tab === 'signup' ? '' : 'none';
+    clearLoginError();
+  });
+});
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`section-${tab.dataset.section}`).classList.add('active');
+    if (tab.dataset.section === 'deals') loadDeals();
+    if (tab.dataset.section === 'receipts') loadReceipts();
+    if (tab.dataset.section === 'analyze') loadReceiptCheckboxes();
+  });
+});
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  uploadFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener('change', () => uploadFiles([...fileInput.files]));
+
+async function uploadFiles(files) {
+  const pdfs = files.filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'));
+  if (!pdfs.length) { toast('Please select PDF files.'); return; }
+  const wrap = document.getElementById('progress-wrap');
+  const fill = document.getElementById('progress-fill');
+  const status = document.getElementById('upload-status');
+  wrap.style.display = 'block';
+  for (let i = 0; i < pdfs.length; i++) {
+    const f = pdfs[i];
+    status.textContent = `Uploading ${f.name}… (${i+1}/${pdfs.length})`;
+    fill.style.width = `${Math.round(((i) / pdfs.length) * 100)}%`;
+    try {
+      const form = new FormData();
+      form.append('file', f);
+      const res = await fetch(`${API_URL}/api/upload`, {
+        method: 'POST',
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        body: form,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      fill.style.width = `${Math.round(((i+1) / pdfs.length) * 100)}%`;
+      toast(`✅ ${f.name} uploaded`);
+    } catch (e) {
+      toast(`❌ ${f.name}: ${e.message}`, 4000);
+    }
+  }
+  status.textContent = 'Done!';
+  setTimeout(() => { wrap.style.display = 'none'; fill.style.width = '0'; }, 2000);
+  fileInput.value = '';
+}
+
+// ── Receipts ──────────────────────────────────────────────────────────────────
+let receiptsCache = [];
+
+async function loadReceipts() {
+  const list = document.getElementById('receipts-list');
+  list.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading…</div>';
+  try {
+    const res = await apiFetch('/api/receipts');
+    receiptsCache = await res.json();
+    renderReceiptsList(receiptsCache);
+  } catch (e) {
+    list.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+  }
+}
+
+function renderReceiptsList(receipts) {
+  const list = document.getElementById('receipts-list');
+  if (!receipts.length) {
+    list.innerHTML = '<div class="empty-state">📭 No receipts yet. Upload one!</div>';
+    return;
+  }
+  list.innerHTML = receipts.map(r => `
+    <div class="receipt-card">
+      <div class="receipt-header" onclick="toggleReceipt('${r.receipt_id}')">
+        <div>
+          <h3>${escHtml(r.store || 'Costco Receipt')}</h3>
+          <div style="font-size:0.8rem;color:var(--muted)">${r.receipt_date || ''} &mdash; ${r.items?.length || 0} items</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();reparseReceipt('${r.receipt_id}')">Re-parse</button>
+          <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteReceipt('${r.receipt_id}')">Delete</button>
+          <span id="chevron-${r.receipt_id}">▼</span>
+        </div>
+      </div>
+      <div class="receipt-body" id="body-${r.receipt_id}">
+        <div class="receipt-meta">Uploaded: ${r.upload_date?.slice(0,10) || ''} &bull;
+          <a href="${API_URL}/api/receipt/${r.receipt_id}/pdf" target="_blank">View PDF</a>
+        </div>
+        <table>
+          <thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Price</th><th>TPD</th></tr></thead>
+          <tbody>
+            ${(r.items || []).map((it, idx) => `
+              <tr>
+                <td>${escHtml(it.item_number || '')}</td>
+                <td>${escHtml(it.name || '')}</td>
+                <td>${it.qty || 1}</td>
+                <td>$${Number(it.price || 0).toFixed(2)}${it.original_price ? ` <s style="color:var(--muted);font-size:0.8rem">$${Number(it.original_price).toFixed(2)}</s>` : ''}</td>
+                <td>${it.tpd ? '<span class="badge badge-tpd">TPD</span>' : ''}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`).join('');
+}
+
+function toggleReceipt(id) {
+  const body = document.getElementById(`body-${id}`);
+  const chev = document.getElementById(`chevron-${id}`);
+  body.classList.toggle('open');
+  chev.textContent = body.classList.contains('open') ? '▲' : '▼';
+}
+
+async function deleteReceipt(id) {
+  if (!confirm('Delete this receipt?')) return;
+  await apiFetch(`/api/receipt/${id}`, { method: 'DELETE' });
+  toast('Receipt deleted.');
+  loadReceipts();
+}
+
+async function clearReceipts() {
+  if (!confirm('Delete ALL receipts?')) return;
+  await apiFetch('/api/receipts', { method: 'DELETE' });
+  toast('All receipts cleared.');
+  loadReceipts();
+}
+
+async function reparseReceipt(id) {
+  toast('Re-parsing with Nova Premier…');
+  try {
+    await apiFetch(`/api/reparse/${id}`, { method: 'POST' });
+    toast('✅ Re-parsed successfully.');
+    loadReceipts();
+  } catch (e) { toast(`❌ ${e.message}`, 4000); }
+}
+
+// ── Deals ─────────────────────────────────────────────────────────────────────
+let dealsCache = [];
+let activeDealSource = 'all';
+
+async function loadDeals() {
+  const wrap = document.getElementById('deals-table-wrap');
+  wrap.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading…</div>';
+  try {
+    const res = await apiFetch('/api/price-drops');
+    dealsCache = await res.json();
+    renderDeals();
+  } catch (e) {
+    wrap.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+  }
+}
+
+function renderDeals() {
+  const search = document.getElementById('deals-search').value.toLowerCase();
+  const sources = [...new Set(dealsCache.map(d => d.source).filter(Boolean))].sort();
+  const tabsEl = document.getElementById('deal-source-tabs');
+  tabsEl.innerHTML = [
+    { key: 'all', label: 'All' },
+    ...sources.map(s => ({ key: s, label: s }))
+  ].map(({ key, label }) => {
+    const count = key === 'all' ? dealsCache.length : dealsCache.filter(d => d.source === key).length;
+    return `<button class="deal-tab-btn ${activeDealSource === key ? 'active' : ''}" onclick="setDealSource('${key}')">
+      ${escHtml(label)}<span class="deal-count">${count}</span>
+    </button>`;
+  }).join('');
+
+  let filtered = activeDealSource === 'all' ? dealsCache : dealsCache.filter(d => d.source === activeDealSource);
+  if (search) filtered = filtered.filter(d =>
+    (d.item_name || '').toLowerCase().includes(search) ||
+    (d.item_number || '').includes(search)
+  );
+
+  const wrap = document.getElementById('deals-table-wrap');
+  if (!filtered.length) {
+    wrap.innerHTML = '<div class="empty-state">No deals found.</div>';
+    return;
+  }
+  wrap.innerHTML = `<table>
+    <thead><tr><th>Item #</th><th>Name</th><th>Sale Price</th><th>Expires</th><th>Source</th><th>Link</th></tr></thead>
+    <tbody>${filtered.map(d => `
+      <tr>
+        <td>${escHtml(d.item_number || '')}</td>
+        <td>${escHtml(d.item_name || '')}</td>
+        <td>$${Number(d.sale_price || 0).toFixed(2)}${d.original_price ? ` <s style="color:var(--muted)">$${Number(d.original_price).toFixed(2)}</s>` : ''}</td>
+        <td>${escHtml(d.promo_end || '')}</td>
+        <td>${escHtml(d.source || '')}</td>
+        <td>${d.link ? `<a href="${escHtml(d.link)}" target="_blank" rel="noopener">🔗</a>` : ''}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+function setDealSource(src) {
+  activeDealSource = src;
+  renderDeals();
+}
+
+document.getElementById('deals-search').addEventListener('input', () => renderDeals());
+
+async function scanPrices() {
+  document.getElementById('scan-spinner').style.display = 'inline-block';
+  try {
+    const res = await apiFetch('/api/scan-prices', { method: 'POST' });
+    const data = await res.json();
+    toast(`✅ Scanned! ${data.items_stored || 0} deals stored.`);
+    loadDeals();
+  } catch (e) { toast(`❌ ${e.message}`, 4000); }
+  finally { document.getElementById('scan-spinner').style.display = 'none'; }
+}
+
+async function clearPriceDrops() {
+  if (!confirm('Clear all deals?')) return;
+  await apiFetch('/api/price-drops', { method: 'DELETE' });
+  toast('Deals cleared.');
+  loadDeals();
+}
+
+// ── Analysis ──────────────────────────────────────────────────────────────────
+async function loadReceiptCheckboxes() {
+  const wrap = document.getElementById('receipt-checkboxes');
+  if (receiptsCache.length === 0) {
+    try {
+      const res = await apiFetch('/api/receipts');
+      receiptsCache = await res.json();
+    } catch { return; }
+  }
+  wrap.innerHTML = receiptsCache.map(r => `
+    <label style="font-size:0.85rem;display:flex;align-items:center;gap:4px;cursor:pointer">
+      <input type="checkbox" value="${r.receipt_id}">
+      ${escHtml(r.store || 'Receipt')} ${r.receipt_date || ''}
+    </label>`).join('');
+}
+
+async function runAnalysis() {
+  const output = document.getElementById('analysis-output');
+  output.innerHTML = '<p class="thinking"><span class="spinner"></span>Analyzing purchases…</p>';
+
+  const selectedIds = [...document.querySelectorAll('#receipt-checkboxes input:checked')].map(i => i.value);
+  const dateFrom = document.getElementById('analyze-from').value;
+  const dateTo = document.getElementById('analyze-to').value;
+  const selectedSources = [...document.getElementById('analyze-sources').selectedOptions].map(o => o.value);
+
+  const params = new URLSearchParams();
+  selectedIds.forEach(id => params.append('receipt_ids', id));
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
+  selectedSources.forEach(s => params.append('sources', s));
+
+  try {
+    let fullText = '';
+    const url = `${API_URL}/api/analyze?${params}`;
+    const res = await fetch(url, { headers: getHeaders({ Accept: 'text/event-stream' }) });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+
+    output.innerHTML = '<div id="stream-content" class="streaming-cursor"></div>';
+    const contentEl = document.getElementById('stream-content');
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const json = line.slice(6).trim();
+        if (!json) continue;
+        try {
+          const evt = JSON.parse(json);
+          if (evt.type === 'chunk') {
+            fullText += evt.text;
+            contentEl.innerHTML = renderMarkdown(fullText);
+            contentEl.classList.add('streaming-cursor');
+          } else if (evt.type === 'tool') {
+            contentEl.innerHTML = renderMarkdown(fullText) +
+              `<p class="thinking">🔧 Calling tool: ${escHtml(evt.name)}…</p>`;
+          } else if (evt.type === 'done') {
+            fullText = evt.text || fullText;
+            contentEl.classList.remove('streaming-cursor');
+            contentEl.innerHTML = renderMarkdown(fullText);
+          } else if (evt.type === 'error') {
+            output.innerHTML = `<p style="color:var(--red)">Error: ${escHtml(evt.text)}</p>`;
+          }
+        } catch { /* ignore malformed events */ }
+      }
+    }
+    contentEl.classList.remove('streaming-cursor');
+    if (!fullText.trim()) output.innerHTML = '<p class="empty-state">No analysis results.</p>';
+  } catch (e) {
+    output.innerHTML = `<p style="color:var(--red)">Error: ${escHtml(e.message)}</p>`;
+  }
+}
+
+// ── Markdown renderer ─────────────────────────────────────────────────────────
+function renderMarkdown(md) {
+  if (!md) return '';
+  let html = escHtml(md);
+  // Tables
+  html = html.replace(/\|(.+)\|\n\|[-|: ]+\|\n((?:\|.+\|\n?)*)/g, (_, hdr, rows) => {
+    const ths = hdr.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+    const trs = rows.trim().split('\n').map(row => {
+      const tds = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+  });
+  html = html
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/\n/g, '<br>');
+  return html;
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function toast(msg, duration = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function loadAll() {
+  loadReceipts();
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+initAuth();
+</script>
+</body>
+</html>
